@@ -15,7 +15,7 @@ A powerful AI-powered chat bot for Roblox that uses NVIDIA's API to intelligentl
 
 ### Method 1: Direct Load (Recommended)
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/ai-script/main/main.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Damir1401-blip/ai-script/main/main.lua"))()
 ```
 
 ### Method 2: Manual Execution

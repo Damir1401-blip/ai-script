@@ -87,8 +87,12 @@ end
 local function shouldRespond(message, playerName)
     local lowerMessage = string.lower(message)
     
+    print("🔍 [TRIGGER CHECK] Message:", message, "| From:", playerName)
+    print("🔍 [TRIGGER CHECK] Lowercase:", lowerMessage)
+    
     -- Don't respond to own messages
     if playerName == LocalPlayer.Name then
+        print("🔍 [TRIGGER CHECK] Ignoring own message")
         return false
     end
     
@@ -96,15 +100,18 @@ local function shouldRespond(message, playerName)
     local triggers = {"ai", "bot", "help", "question", "what", "how", "why", "when", "where"}
     for _, trigger in pairs(triggers) do
         if string.find(lowerMessage, trigger) then
+            print("🎩 [TRIGGER MATCH] Found trigger word:", trigger)
             return true
         end
     end
     
     -- Respond to messages mentioning the player
     if string.find(lowerMessage, string.lower(LocalPlayer.Name)) then
+        print("🎩 [TRIGGER MATCH] Message mentions player:", LocalPlayer.Name)
         return true
     end
     
+    print("🚫 [TRIGGER CHECK] No triggers found")
     return false
 end
 
@@ -144,44 +151,105 @@ local function processMessage(message, playerName)
     end)
 end
 
--- Connect to chat events
+-- Connect to chat events with multiple methods and debugging
 local function connectToChat()
-    local success = pcall(function()
-        -- Method 1: Connect to ReplicatedStorage chat events
+    print("🔍 Attempting to connect to chat systems...")
+    local connectionsActive = 0
+    
+    -- Method 1: ReplicatedStorage DefaultChatSystemChatEvents
+    local success1 = pcall(function()
         if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
             local chatEvents = ReplicatedStorage.DefaultChatSystemChatEvents
+            print("💬 Found DefaultChatSystemChatEvents")
+            
             if chatEvents:FindFirstChild("OnMessageDoneFiltering") then
                 chatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(messageData)
+                    print("📨 [Method 1] Raw message data:", messageData)
                     if messageData and messageData.Message and messageData.FromSpeaker then
+                        print("📨 [Method 1] Processing:", messageData.FromSpeaker .. ": " .. messageData.Message)
                         processMessage(messageData.Message, messageData.FromSpeaker)
                     end
                 end)
-                print("✅ Connected to chat via ReplicatedStorage")
-                return true
+                print("✅ Connected to OnMessageDoneFiltering")
+                connectionsActive = connectionsActive + 1
             end
-        end
-        
-        -- Method 2: Connect to player chatted events
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character and player.Character:FindFirstChild("Head") then
-                player.Chatted:Connect(function(message)
-                    processMessage(message, player.Name)
-                end)
+            
+            -- Also try SayMessageRequest for sending
+            if chatEvents:FindFirstChild("SayMessageRequest") then
+                print("✅ Found SayMessageRequest for sending messages")
             end
+        else
+            print("❌ DefaultChatSystemChatEvents not found")
         end
-        
-        Players.PlayerAdded:Connect(function(player)
-            player.Chatted:Connect(function(message)
-                processMessage(message, player.Name)
-            end)
-        end)
-        
-        print("✅ Connected to player chat events")
-        return true
     end)
     
-    if not success then
-        print("❌ Failed to connect to chat")
+    -- Method 2: Player.Chatted events for all current players
+    local success2 = pcall(function()
+        for _, player in pairs(Players:GetPlayers()) do
+            player.Chatted:Connect(function(message)
+                print("📨 [Method 2] Player chatted:", player.Name .. ": " .. message)
+                processMessage(message, player.Name)
+            end)
+            print("✅ Connected to", player.Name .. "'s chat")
+        end
+        connectionsActive = connectionsActive + 1
+    end)
+    
+    -- Method 3: Connect to new players when they join
+    local success3 = pcall(function()
+        Players.PlayerAdded:Connect(function(player)
+            print("👥 New player joined:", player.Name)
+            player.Chatted:Connect(function(message)
+                print("📨 [Method 3] New player chatted:", player.Name .. ": " .. message)
+                processMessage(message, player.Name)
+            end)
+            print("✅ Connected to new player", player.Name .. "'s chat")
+        end)
+        connectionsActive = connectionsActive + 1
+    end)
+    
+    -- Method 4: Try TextChatService (new Roblox chat system)
+    local success4 = pcall(function()
+        local TextChatService = game:GetService("TextChatService")
+        if TextChatService and TextChatService.MessageReceived then
+            TextChatService.MessageReceived:Connect(function(message)
+                if message.TextSource then
+                    local playerName = message.TextSource.Name
+                    local messageText = message.Text
+                    print("📨 [Method 4] TextChatService:", playerName .. ": " .. messageText)
+                    processMessage(messageText, playerName)
+                end
+            end)
+            print("✅ Connected to TextChatService")
+            connectionsActive = connectionsActive + 1
+        end
+    end)
+    
+    -- Method 5: StarterPlayer chat events
+    local success5 = pcall(function()
+        local StarterPlayer = game:GetService("StarterPlayer")
+        if StarterPlayer:FindFirstChild("StarterPlayerScripts") then
+            local scripts = StarterPlayer.StarterPlayerScripts
+            if scripts:FindFirstChild("ChatScript") then
+                print("✅ Found ChatScript in StarterPlayerScripts")
+            end
+        end
+    end)
+    
+    print("📊 Chat connection summary:")
+    print("   Method 1 (ReplicatedStorage):", success1 and "✅" or "❌")
+    print("   Method 2 (Current Players):", success2 and "✅" or "❌")
+    print("   Method 3 (New Players):", success3 and "✅" or "❌")
+    print("   Method 4 (TextChatService):", success4 and "✅" or "❌")
+    print("   Method 5 (StarterPlayer):", success5 and "✅" or "❌")
+    print("🔗 Active connections:", connectionsActive)
+    
+    if connectionsActive > 0 then
+        print("✅ Successfully connected to chat system(s)")
+        return true
+    else
+        print("❌ Failed to connect to any chat system")
+        return false
     end
 end
 
@@ -601,9 +669,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- Create initial GUI
-spawn(function()
-    wait(3) -- Wait for everything to load
+-- Create initial GUI immediately
+wait(1) -- Short wait for LocalPlayer
+if LocalPlayer and LocalPlayer.PlayerGui then
     local _, logFunc, updateFunc = createGUI()
     addLog = logFunc
     updateGUI = updateFunc
@@ -611,8 +679,11 @@ spawn(function()
     if addLog then
         addLog("GUI System loaded successfully")
         addLog("Press Right Ctrl to reopen if closed")
+        addLog("Connecting to chat systems...")
     end
-end)
+else
+    warn("❌ LocalPlayer or PlayerGui not available yet")
+end
 
 print("✨ Setup complete! AI is ready with GUI interface!")
 print("🎨 GUI will appear in 3 seconds...")
